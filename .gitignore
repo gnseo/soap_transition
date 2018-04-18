@@ -4,3 +4,4 @@ request.xml
 event.json
 response.xml
 soap_transition.zip
+buildspec.yml
