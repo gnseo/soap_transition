@@ -10,33 +10,46 @@ import datetime
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.info("=============================================")
-try:
-    logger.info("TRYING: something")
 
-    # create the webservice client
-    client = SoapClient(
-        location = "http://61.14.208.38/KO856_Default/Services/MDM/PB3C104FL.asmx", #location, use wsdl,
-        cache = None,
-        #proxy = parse_proxy(proxy),
-        #cacert = cacert,
-        timeout = 20,
-        ns = None,
-        # TODO: find a better method to not include ns prefix in children:
-        #   (wsdl parse should detect qualification instead of server dialect)
-        # soap_server = "jetty",
-        namespace = "http://www.unierp.com/",
-        # soap_ns = "soapenv",
-        trace = None
-    )
-except:
-    logger.error("ERROR: Unexpected error: %s" % sys.exc_info()[0])
-    sys.exit()
+run_as = "run_as"
 
-logger.info("SUCCESS: Connection to RDS mysql instance succeeded")
+def handler(event, context):
+  if not run_as in event["queryStringParameters"]:
+    return "%s is required. Possible values: client, server." % run_as
+
+  if event["queryStringParameters"][run_as] == "client":
+    return handler_client(event, context)
+
+  if event["queryStringParameters"][run_as] == "server":
+    return handler_server(event, context)
 
 def handler_client(event, context):
     """
     """
+    try:
+        logger.info("TRYING: something")
+
+        # create the webservice client
+        client = SoapClient(
+            location = "http://61.14.208.38/KO856_Default/Services/MDM/PB3C104FL.asmx", #location, use wsdl,
+            cache = None,
+            #proxy = parse_proxy(proxy),
+            #cacert = cacert,
+            timeout = 20,
+            ns = None,
+            # TODO: find a better method to not include ns prefix in children:
+            #   (wsdl parse should detect qualification instead of server dialect)
+            # soap_server = "jetty",
+            namespace = "http://www.unierp.com/",
+            # soap_ns = "soapenv",
+            trace = None
+        )
+    except:
+        logger.error("ERROR: Unexpected error: %s" % sys.exc_info()[0])
+        sys.exit()
+
+    logger.info("SUCCESS: Connection to RDS mysql instance succeeded")
+
     host = os_env["soap_host"] if "soap_host" in os_env else event["soap_host"]
     internal_IP = os_env["internal_IP"] if "internal_IP" in os_env else event["internal_IP"]
 
@@ -116,7 +129,8 @@ def handler_client(event, context):
         'headers': { 'Content-Type': 'application/xml' },
         'body': str(result,'utf8')
     }
-def handler(event, context):
+
+def handler_server(event, context):
 
     dispatcher = SoapDispatcher(
         name="PySimpleSoapSample",
