@@ -1,19 +1,20 @@
 import sys
-import logging
 
 from pysimplesoap.client import SoapClient, SimpleXMLElement, SoapFault, REVERSE_TYPE_MAP
 from pysimplesoap.server import SoapDispatcher, unicode, Date, Decimal
 from os import environ as os_env
 import datetime
 import re
+import json
 
+import logging
 # logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.info("=============================================")
 
-# run_as = "run_as"
 original_url = "http://61.14.208.38/KO856_Default/Services/MDM/PB3C104FL.asmx"
+regPrefix = ".+\:"
 
 def handler(event, context):
 
@@ -40,13 +41,44 @@ def handler(event, context):
   for e in event.keys():
     logger.info(e)
     logger.info(str(event[e]))
-    logger.info(event[e])
 
   if event["requestContext"]["httpMethod"] == "GET":
     return handler_server(event, context)
 
   if event["requestContext"]["httpMethod"] == "POST":
     return handler_client(event, context)
+
+def handler_client(event, context):
+  client, results = get_client_result(event)
+
+  return {
+        'statusCode': 200,
+        'headers': { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        'body': json.JSONEncoder().encode({
+
+                'result':
+                  [
+                    {'column1': str(results("E5_B_ITEM")("item_group_cd")),'column2': 'it is column 2.'}
+                  ]
+          })
+      }
+
+def handler_server(event, context):
+    html_body = "Nothing"
+
+    with open("openui5/index.html") as f:
+      html_body = f.read()
+      html_body = html_body.replace("{\"queryStringParametersFromGETMethod\":\"\"}", json.JSONEncoder().encode(event["queryStringParameters"]))
+
+    return {
+       'statusCode': 200,
+       'headers': {
+           'Content-Type': 'text/html'
+           # 'Content-Disposition': 'attachment; filename="dev.wsdl"'
+       },
+       #'body': str(wsdl,'utf8')
+       'body': html_body
+    }
 
 def create_client_by_url(url):
   """
@@ -64,7 +96,7 @@ def create_client_by_url(url):
       # create the webservice client
       client = SoapClient(
           location = url, #location, use wsdl,
-          cache = None,
+          cache = False,
           #proxy = parse_proxy(proxy),
           #cacert = cacert,
           timeout = 20,
@@ -141,6 +173,7 @@ def get_client_result(event):
   client = create_client_by_url(original_url)
 
   if client is None:
+    logger.error("client is None")
     sys.exit()
 
   result = ""
@@ -148,9 +181,12 @@ def get_client_result(event):
   try:
       logger.info("Calling remote method")
       results = client.cBLkUpItem_B_LOOK_UP_ITEM_SVR(**prepare_parameters(event))
-  except SoapFault:
-    for f in SoapFault.children():
-      logger.error(f.get_name())
+  except SoapFault as SFault:
+    try:
+      for f in SFault.children():
+        logger.error(f.get_name())
+    except AttributeError:
+      logger.error(SFault.faultstring)
     sys.exit()
   except:
       pass
@@ -158,6 +194,7 @@ def get_client_result(event):
   else:
     # result = type(results) is SimpleXMLElement
     result = results.as_xml("resp", True)
+    logger.info(result)
 
     # for node in results.cBLkUpItem_B_LOOK_UP_ITEM_SVRResult(tag = "diffgr:diffgram", ns = True).children():
     #   logger.info("node name:" + node.get_name())
@@ -173,9 +210,10 @@ def get_client_result(event):
         else:
           open("request.xml", "w").write(client.xml_request)
           open("response.xml", "w").write(client.xml_response)
-  return {client, results}
+  return client, results
 
-def handler_client(event, context):
+
+def handler_client_temp(event, context):
     """
     """
     client, results = get_client_result(event)
@@ -188,7 +226,7 @@ def handler_client(event, context):
         'body': str(result_xml,'utf8')
     }
 
-def handler_server(event, context):
+def handler_server_temp(event, context):
 
     if "deployed" not in os_env.keys():
       with open("response.xml", "r") as res:
@@ -204,8 +242,8 @@ def handler_server(event, context):
       client, results = get_client_result(event)
 
     # result_xml = results.as_xml("resp", True)
-    returns_types = results_to_field_types(results)
-    # args_types = results_to_field_types(prepare_parameters(event))
+    returns_types = results_to_method_returns(results)
+    args_types = results_to_method_returns(prepare_parameters(event))
 
     dispatcher = SoapDispatcher(
         name="PB3C104FL",
@@ -236,24 +274,26 @@ def handler_server(event, context):
         args=args_types
     )
 
+    logger.info(returns_types)
+    logger.info(args_types)
+
     # for method, doc in dispatcher.list_methods():
     #     request, response, doc = dispatcher.help(method)
 
     wsdl = dispatcher.wsdl()
 
+    # return returns_types
 
-    return wsdl
+    return {
+       'statusCode': 200,
+       'headers': {
+           'Content-Type': 'application/xml'
+           # 'Content-Disposition': 'attachment; filename="dev.wsdl"'
+       },
+       'body': str(wsdl,'utf8')
+}
 
-    # return {
-    #     'statusCode': 200,
-    #     'headers': {
-    #         'Content-Type': 'application/xml'
-    #         # 'Content-Disposition': 'attachment; filename="dev.wsdl"'
-    #     },
-    #     'body': str(wsdl,'utf8')
-    # }
-
-def results_to_field_types(results):
+def results_to_method_returns(results):
   returns_types = {}
 
   def parse_attribute(node, returned_scheme = None):
@@ -264,7 +304,7 @@ def results_to_field_types(results):
     returns_sub = {}
 
     if node.children() is None:
-      returns_sub = returned_scheme[node.get_name()]["py_type"]
+      returns_sub = returned_scheme[re.sub(regPrefix,"",node.get_name())]["py_type"]
     else:
       for tag in node.children():
 
@@ -279,14 +319,19 @@ def results_to_field_types(results):
           is_array = False
 
           if returned_scheme is not None:
-            if tag.get_name() in returned_scheme:
-              if "is_array" in returned_scheme[tag.get_name()]:
-                is_array = returned_scheme[tag.get_name()]["is_array"]
+            if re.sub(regPrefix,"",tag.get_name()) in returned_scheme:
+              if "is_array" in returned_scheme[re.sub(regPrefix,"",tag.get_name())]:
+                is_array = returned_scheme[re.sub(regPrefix,"",tag.get_name())]["is_array"]
 
           if is_array == True:
-            returns_sub[tag.get_name()] = [parse_attribute(tag, returned_scheme)]
+            returns_sub[re.sub(regPrefix,"",tag.get_name())] = [parse_attribute(tag, returned_scheme)]
           else:
-            returns_sub[tag.get_name()] = parse_attribute(tag, returned_scheme)
+            if tag.get_name() == "soap:Body":
+              returns_sub = parse_attribute(tag, returned_scheme)
+            elif tag.get_name() == "cBLkUpItem_B_LOOK_UP_ITEM_SVRResponse":
+              returns_sub = parse_attribute(tag, returned_scheme)
+            else:
+              returns_sub[re.sub(regPrefix,"",tag.get_name())] = parse_attribute(tag, returned_scheme)
         else:
           logger.info("Unexcepted tag: %s, type: %s" % tag.get_name(), type(tag).__name__ )
 

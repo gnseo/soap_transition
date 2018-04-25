@@ -1,0 +1,185 @@
+<!DOCTYPE HTML>
+<html>
+
+	<head>
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta charset="UTF-8">
+
+		<title>OpenUI5 Basic Template</title>
+
+		<script id="sap-ui-bootstrap"
+			src='https://openui5.hana.ondemand.com/1.52.10/resources/sap-ui-core.js'
+			data-sap-ui-libs="sap.m,sap.ui.table,sap.ui.commons,sap.ui.layout"
+			data-sap-ui-theme="sap_belize"
+			data-sap-ui-compatVersion="edge"
+			data-sap-ui-preload="async"
+			data-sap-ui-language="en"
+			>
+		</script>
+
+		<style>
+
+		</style>
+
+		<script>
+			function create_input_pair({fieldName, labelText, inputSettings={}}){
+				let myLabel = new sap.m.Label("lbl"+fieldName, {
+					text: labelText
+					//labelFor: myInput
+				})
+				//myLabel.placeAt("content")
+				let myInput = new sap.m.Input(fieldName,{
+					type: "Text",
+					placeholder: labelText,
+					...inputSettings
+				})
+				myInput.getIdForLabel(myLabel)
+				//myInput.placeAt("content")
+
+				return function(targetPlace){
+					return [myLabel,myInput].map(obj => {
+						targetPlace !== undefined ? obj.placeAt(targetPlace) : "";
+						return obj
+					})
+				}
+			}
+
+			function create_form_input({fieldName, labelText, inputSettings={}}){
+				return new sap.ui.layout.form.FormElement({
+					label: labelText,
+					fields: [new sap.m.Input(fieldName,{
+						type: "Text",
+						placeholder: labelText,
+						...inputSettings
+					})]
+				})
+			}
+
+			sap.ui.getCore().attachInit(function() {
+
+				const inputs_layout = new sap.ui.layout.form.Form("inputs_layout", {
+					title: "form title",
+					editable: true,//it makes label to stay middle vertically.
+					layout: new sap.ui.layout.form.ResponsiveGridLayout({
+						/*
+						labelSpanXL: 4,
+						labelSpanL: 3,
+						labelSpanM: 4,
+						labelSpanS: 12,
+						adjustLabelSpan: false,
+						emptySpanXL: 0,
+						emptySpanL: 0,
+						emptySpanM: 0,
+						emptySpanS: 0,
+						columnsSpanXL: 3,
+						columnsSpanL: 6,
+						columnsSpanM: 2,
+						singleContainerFullSize: false
+						*/
+					}),
+					/*
+					toolbar: new sap.m.OverflowToolbar({
+						content: [
+							new sap.m.Button({
+									text: "Say Hello",
+									press: function() {
+										 sap.m.MessageToast.show("Hello World");
+									}
+							})
+						]
+					}),
+					*/
+					formContainers: [
+						new sap.ui.layout.form.FormContainer({
+							title: "Search",
+							formElements: [
+								create_form_input({
+									fieldName: "batchNumber",
+									labelText: "Batch Number"
+								})
+								,
+								create_form_input({
+									fieldName: "lotNumber",
+									labelText: "Lot Number",
+									inputSettings: {type:"Number"}
+								})
+							]
+						})
+					]
+				})
+				//inputs_layout.addStyleClass("sapUiResponsiveMargin")
+				//inputs_layout.placeAt("content")
+
+				const button_group = new sap.m.FlexBox({
+					fitContainer: true,
+					items: [
+						new sap.m.Button({
+								text: "Search",
+								icon: "sap-icon://search",
+								press: function() {
+									 sap.m.MessageToast.show("Hello World");
+								}
+						})
+					]
+				})
+
+				const myTable = new sap.ui.table.Table("myTable", {
+					height : "100%",
+					//title : "Result",
+					selectionMode: sap.ui.table.SelectionMode.None,
+					columns : [
+						new sap.ui.table.Column("MyColumn1", {
+							name: "Column 1",
+							label: "칼럼",
+							template: new sap.ui.commons.TextView({text:"{column1}"})
+						}),
+						new sap.ui.table.Column("MyColumn2", {
+							name: "Column 2",
+							label: "COLUMN",
+							template: new sap.ui.commons.TextView({text:"{column2}"})
+						})
+					]
+				})
+
+				new sap.m.VBox({
+					items: [
+						inputs_layout,
+						button_group,
+						myTable.addStyleClass("sapUiMediumMarginTop")
+					]
+				}).addStyleClass("sapUiResponsiveMargin").placeAt("content")
+
+			  var oModel = new sap.ui.model.json.JSONModel();
+
+				//oModel.loadData("https://e77je9smo5.execute-api.ap-northeast-2.amazonaws.com/dev",{},false,'POST',false,false,{})
+
+				$.ajax({
+					url: "https://e77je9smo5.execute-api.ap-northeast-2.amazonaws.com/dev",
+					method: 'POST',
+					cache: false,
+					data: {"queryStringParametersFromGETMethod":""},
+					beforeSend : function(xhr){
+						let myTable = sap.ui.getCore().byId("myTable")
+						myTable.setBusy(true)
+					}
+				})
+					.done(function(data){
+						oModel.setData(data)
+					})
+					.always(function(){
+						let myTable = sap.ui.getCore().byId("myTable")
+						myTable.setBusy(false)
+					})
+
+			  //oModel.setData(naughtyList);
+				//const myTable = sap.ui.getCore().byId("myTable")
+				myTable.setModel(oModel);
+			  myTable.bindRows("/result");
+			});
+		</script>
+	</head>
+
+	<body class="sapUiBody" id="content">
+	</body>
+
+</html>
